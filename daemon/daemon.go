@@ -117,8 +117,8 @@ func getLocalIp(serverHost string) net.IP {
 		for addr, err = net.ResolveIPAddr("ip", serverHost); err != nil; {
 			log.Printf(err.Error())
 		}
+		serverIp = addr.IP
 	}
-	serverIp = addr.IP
 
 	adds, err := net.InterfaceAddrs()
 	if err != nil {
