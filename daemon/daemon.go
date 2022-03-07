@@ -54,6 +54,7 @@ func doReport(ctx context.Context, config *Config, client *http.Client) {
 			log.Println(err.Error())
 		}
 		domains := strings.Fields(strings.TrimSpace(string(bytes)))
+		domains = append(domains, "")
 		for _, domain := range domains {
 			params := url.Values{
 				"name": {buildDomainName(domain, config)},
