@@ -56,8 +56,12 @@ func doReport(ctx context.Context, config *Config, client *http.Client) {
 		domains := strings.Fields(strings.TrimSpace(string(bytes)))
 		domains = append(domains, "")
 		for _, domain := range domains {
+			name := buildDomainName(domain, config)
+			if name == "" {
+				continue
+			}
 			params := url.Values{
-				"name": {buildDomainName(domain, config)},
+				"name": {name},
 				"ip":   {ip.String()},
 			}
 			request, err := http.NewRequestWithContext(ctx, "POST", config.Server.Address+"/rpc/record", strings.NewReader(params.Encode()))
@@ -99,7 +103,11 @@ func buildDomainName(domain string, config *Config) string {
 	if domain != "" {
 		return domain + config.Domain.Suffix
 	} else {
-		return domain[1:]
+		if config.Domain.Suffix != "" {
+			return config.Domain.Suffix[1:]
+		} else {
+			return ""
+		}
 	}
 }
 
