@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"dns-client/command/path"
 	"encoding/json"
@@ -8,9 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -49,54 +48,50 @@ func doReport(ctx context.Context, config *Config, client *http.Client) {
 		for ip = getLocalIp(config.Server.Host); ip == nil; {
 		}
 
-		bytes, err := ioutil.ReadFile(filepath.Join(path.ConfigDirPath(), config.Domain.DomainFile))
+		byteSlice, err := ioutil.ReadFile(filepath.Join(path.ConfigDirPath(), config.Domain.DomainFile))
 		if err != nil {
 			log.Println(err.Error())
 		}
-		domains := strings.Fields(strings.TrimSpace(string(bytes)))
+		domains := strings.Fields(strings.TrimSpace(string(byteSlice)))
 		domains = append(domains, "")
 		for _, domain := range domains {
-			name := buildDomainName(domain, config)
-			if name == "" {
-				continue
-			}
-			params := url.Values{
-				"name": {name},
-				"ip":   {ip.String()},
-			}
-			request, err := http.NewRequestWithContext(ctx, "POST", config.Server.Address+"/rpc/record", strings.NewReader(params.Encode()))
-			if err != nil {
-				log.Printf(err.Error())
-				continue
-
-			}
-			request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-			request.Header.Add("Content-Length", strconv.Itoa(len(params.Encode())))
-			request.Header.Set("X-Dns-Token", config.Server.Token)
-			resp, err := client.Do(request)
-			if err != nil {
-				log.Printf("domain: %v add fail，error info : %v\n", domain, err.Error())
-				continue
-			}
-			body, err := ioutil.ReadAll(resp.Body)
-			resp.Body.Close()
-
-			if err != nil {
-				log.Printf("domain: %v add fail，error info : %v\n", domain, err.Error())
-				continue
-			}
-
-			var respInfo ResponseInfo
-			err = json.Unmarshal(body, &respInfo)
-			if err != nil {
-				log.Printf(err.Error())
-			}
-
-			if !respInfo.Success {
-				log.Printf("domain: %v add fail，error info : %v\n", domain, respInfo.Msg)
-			}
+			doPost(ctx, config, client, domain, ip)
 		}
 	}
+}
+
+func doPost(ctx context.Context, config *Config, client *http.Client, domain string, ip net.IP) {
+	name := buildDomainName(domain, config)
+	if name == "" {
+	}
+	params := map[string]string{
+		"name": name,
+		"ip":   ip.String(),
+	}
+	jsonByte, err := json.Marshal(params)
+	if err != nil {
+		log.Printf(err.Error())
+		return
+	}
+	request, err := http.NewRequestWithContext(ctx, "POST", config.Server.Address+"/rpc/record", bytes.NewBuffer(jsonByte))
+	if err != nil {
+		log.Printf(err.Error())
+		return
+	}
+	request.Header.Set("X-Dns-Token", config.Server.Token)
+	resp, err := client.Do(request)
+	if err != nil {
+		log.Printf("domain: %v add fail，error info : %v\n", domain, err.Error())
+		return
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		log.Printf("domain: %v add fail，error info : %v\n", domain, err.Error())
+		return
+	}
+	log.Printf("resp body :%v", string(body))
+	resp.Body.Close()
 }
 
 func buildDomainName(domain string, config *Config) string {
