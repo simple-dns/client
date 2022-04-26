@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bytes"
 	"context"
 	"dns-client/command/path"
 	"encoding/json"
@@ -9,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -64,20 +64,16 @@ func doPost(ctx context.Context, config *Config, client *http.Client, domain str
 	name := buildDomainName(domain, config)
 	if name == "" {
 	}
-	params := map[string]string{
-		"name": name,
-		"ip":   ip.String(),
+	params := url.Values{
+		"name": {name},
+		"ip":   {ip.String()},
 	}
-	jsonByte, err := json.Marshal(params)
+	request, err := http.NewRequestWithContext(ctx, "POST", config.Server.Address+"/rpc/record", strings.NewReader(params.Encode()))
 	if err != nil {
 		log.Printf(err.Error())
 		return
 	}
-	request, err := http.NewRequestWithContext(ctx, "POST", config.Server.Address+"/rpc/record", bytes.NewBuffer(jsonByte))
-	if err != nil {
-		log.Printf(err.Error())
-		return
-	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("X-Dns-Token", config.Server.Token)
 	resp, err := client.Do(request)
 	if err != nil {
@@ -90,8 +86,15 @@ func doPost(ctx context.Context, config *Config, client *http.Client, domain str
 		log.Printf("domain: %v add fail，error info : %v\n", domain, err.Error())
 		return
 	}
-	log.Printf("resp body :%v", string(body))
-	resp.Body.Close()
+	var respInfo ResponseInfo
+	err = json.Unmarshal(body, &respInfo)
+	if err != nil {
+		log.Printf(err.Error())
+	}
+
+	if !respInfo.Success {
+		log.Printf("domain: %v add fail，error info : %v\n", domain, respInfo.Msg)
+	}
 }
 
 func buildDomainName(domain string, config *Config) string {
