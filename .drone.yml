@@ -24,8 +24,6 @@ steps:
       event: [ tag ]
 
 trigger:
-  branch:
-    - client
   event:
     - tag
     - push
